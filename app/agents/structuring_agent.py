@@ -1,3 +1,4 @@
+import os
 import logging
 from langchain_groq import ChatGroq
 from langchain_tavily import TavilySearch
@@ -11,7 +12,6 @@ llm = ChatGroq(
     temperature=0.3,
 )
 
-import os
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 search_tool = TavilySearch(max_results=3)
 
@@ -64,31 +64,37 @@ async def run_structuring_agent(discovery_output: dict) -> dict:
     
     Şu formatta çıktı üret:
     
-    PROBLEM_TIPI: [problem tipi]
+    PROBLEM_TIPI: [sadece şunlardan birini yaz: Growth, Cost, Operational, Technology, Regulation, Organizational, Hybrid]
     ANA_PROBLEM: [ana problem başlığı]
     
     ANA_NEDEN_1: [birinci ana neden]
-    ALT_NEDEN_1_1: [alt neden]
-    ALT_NEDEN_1_2: [alt neden]
-    ALT_NEDEN_1_3: [alt neden]
+    ALT_NEDEN_1_1: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_1_2: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_1_3: [somut ve açıklayıcı bir cümle]
     
     ANA_NEDEN_2: [ikinci ana neden]
-    ALT_NEDEN_2_1: [alt neden]
-    ALT_NEDEN_2_2: [alt neden]
-    ALT_NEDEN_2_3: [alt neden]
+    ALT_NEDEN_2_1: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_2_2: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_2_3: [somut ve açıklayıcı bir cümle]
     
     ANA_NEDEN_3: [üçüncü ana neden]
-    ALT_NEDEN_3_1: [alt neden]
-    ALT_NEDEN_3_2: [alt neden]
-    ALT_NEDEN_3_3: [alt neden]
+    ALT_NEDEN_3_1: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_3_2: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_3_3: [somut ve açıklayıcı bir cümle]
     
     ANA_NEDEN_4: [dördüncü ana neden]
-    ALT_NEDEN_4_1: [alt neden]
-    ALT_NEDEN_4_2: [alt neden]
+    ALT_NEDEN_4_1: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_4_2: [somut ve açıklayıcı bir cümle]
     
     ANA_NEDEN_5: [beşinci ana neden]
-    ALT_NEDEN_5_1: [alt neden]
-    ALT_NEDEN_5_2: [alt neden]
+    ALT_NEDEN_5_1: [somut ve açıklayıcı bir cümle]
+    ALT_NEDEN_5_2: [somut ve açıklayıcı bir cümle]
+    
+    ÖNEMLİ KURALLAR:
+    - PROBLEM_TIPI dışında hiçbir yere Growth, Cost, Operational, Technology, Regulation, Organizational, Hybrid yazma
+    - Her ALT_NEDEN mutlaka somut bir cümle olmalı, tek kelime olamaz
+    - ALT_NEDEN alanları hiçbir zaman boş kalamaz
+    - Eğer yeterli alt neden bulamazsan ana nedenin farklı boyutlarını düşünerek alt nedenler oluşturabilirsin
     """
 
     response = await llm.ainvoke(structuring_prompt)
@@ -114,7 +120,8 @@ async def run_structuring_agent(discovery_output: dict) -> dict:
         sub_causes = []
         for j in range(1, 4):
             alt_neden = extract_field(content, f"ALT_NEDEN_{i}_{j}")
-            if alt_neden:
+            # Boş değilse ve PROBLEM_TYPES listesinde değilse ekle
+            if alt_neden and alt_neden not in PROBLEM_TYPES:
                 sub_causes.append(alt_neden)
 
         problem_tree.append({

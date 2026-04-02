@@ -13,7 +13,6 @@ class AgentType(str, Enum):
 class TaskRequest(BaseModel):
     task: str
     session_id: Optional[str] = None
-    agent_type: Optional[AgentType] = AgentType.PEER
 
 
 class PeerAgentResponse(BaseModel):
