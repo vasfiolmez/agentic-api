@@ -45,20 +45,31 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
     logger.info(f"Peer Agent çalışıyor. Task: {task}")
 
     # Önce kategoriyi belirle
-    category_prompt = f"""
-    Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
-    - DIRECT_ANSWER: Business bilgi sorusu (rekabet, pazar, sektör trendleri)
-    - REDIRECT: Business problemi (satış düşüşü, maliyet, operasyonel sorun)
-     - OUT_OF_SCOPE: Business dışı talep (yemek tarifi, eğlence, günlük yaşam gibi)
-    - GREETING: Selamlama, teşekkür, vedalaşma veya genel konuşma
-    - ANALYSIS: Problem ağacı, ana neden, alt neden, problem analizi veya daha önce yapılan analiz hakkında soru
-
-    {"ÖNEMLİ: Kullanıcının daha önce oluşturulmuş bir problem ağacı var. Ana neden, alt neden veya analiz hakkındaki her türlü soru ANALYSIS kategorisine girer." if has_problem_tree else ""}
-    
-    Talep: {task}
-    
-    Sadece kategori adını yaz, başka hiçbir şey yazma.
-    """
+    if has_problem_tree:
+        category_prompt = f"""
+        Kullanıcının daha önce oluşturulmuş bir problem ağacı var.
+        Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
+        
+        - ANALYSIS: Problem ağacındaki herhangi bir konu hakkında soru
+        - REDIRECT: Tamamen yeni ve farklı bir business problemi
+        - GREETING: Selamlama, teşekkür, vedalaşma
+        - DIRECT_ANSWER: Genel business bilgi sorusu (pazar, rekabet, sektör)
+        - OUT_OF_SCOPE: Sadece yemek, film, müzik gibi tamamen iş dışı konular
+        
+        Talep: {task}
+        Sadece kategori adını yaz.
+        """
+    else:
+        category_prompt = f"""
+        Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
+        - DIRECT_ANSWER: Business bilgi sorusu (rekabet, pazar, sektör trendleri)
+        - REDIRECT: Business problemi (satış düşüşü, maliyet, operasyonel sorun)
+        - OUT_OF_SCOPE: Business dışı talep (yemek tarifi, eğlence, günlük yaşam)
+        - GREETING: Selamlama, teşekkür, vedalaşma
+        
+        Talep: {task}
+        Sadece kategori adını yaz.
+        """
 
     category_response = await llm.ainvoke(category_prompt)
     category = category_response.content.strip().upper()
@@ -100,10 +111,15 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
         greeting_prompt = f"""
         Kullanıcı şunu söyledi: {task}
         
-        Bu bir selamlama, teşekkür veya vedalaşma mesajı.
-        Kısa, samimi ve profesyonel bir business asistanı gibi karşılık ver.
-        Gerekirse başka bir business sorusu sormaya davet et.
-        Türkçe yaz.
+        KURALLAR:
+        - Kullanıcının mesajına uygun şekilde karşılık ver
+        - Eğer teşekkür ettiyse → teşekkürü kabul et
+        - Eğer selamlama yaptıysa → selamla
+        - Eğer vedalaştıysa → güle güle de
+        - "Merhaba" ile başlama, kullanıcının mesajına göre doğal bir giriş yap
+        - Kısa ve samimi ol
+        - Gerekirse başka bir business sorusu sormaya davet et
+        - Türkçe yaz
         """
         greeting_response = await llm.ainvoke(greeting_prompt)
         return {

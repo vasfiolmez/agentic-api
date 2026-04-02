@@ -7,18 +7,11 @@ from app.agents.discovery_agent import run_discovery_agent
 from app.agents.structuring_agent import run_structuring_agent
 from app.agents.peer_agent import run_peer_agent
 from app.agents.analysis_agent import run_analysis_agent
-from app.core.database import get_db
+from app.core.database import get_db, save_session, get_session
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# -----------------------------------------------
-# SESSION STORE
-# Kullanıcıların konuşma geçmişini bellekte tutar
-# session_id → {history, original_task, completed, problem_tree}
-# -----------------------------------------------
-session_store = {}
 
 
 @router.post("/agent/execute")
@@ -32,13 +25,18 @@ async def execute_agent(request: TaskRequest):
     session_id = request.session_id or str(uuid.uuid4())
 
     # -----------------------------------------------
+    # SESSION'I MONGODB'DEN OKU
+    # Bellekten değil MongoDB'den okuyoruz
+    # Sunucu yeniden başlasa bile veriler kaybolmaz
+    # -----------------------------------------------
+    session_data = await get_session(session_id)
+
+    # -----------------------------------------------
     # OTOMATİK AGENT SEÇİMİ
     # session_id yoksa → Peer Agent (yeni konuşma)
     # session_id var + tamamlanmadı → Discovery devam
     # session_id var + tamamlandı → Peer Agent (yeni soru)
     # -----------------------------------------------
-    session_data = session_store.get(session_id, None)
-
     if session_data is None:
         agent_type = "peer_agent"
         logger.info(f"[ROUTES] Yeni session. Peer Agent başlatılıyor.")
@@ -55,6 +53,7 @@ async def execute_agent(request: TaskRequest):
         # Session geçmişini al
         if session_data is None:
             session_data = {
+                "session_id": session_id,
                 "history": [],
                 "original_task": request.task,
                 "completed": False,
@@ -72,50 +71,51 @@ async def execute_agent(request: TaskRequest):
 
             problem_tree = session_data.get("problem_tree", {})
 
-            # -----------------------------------------------
-            # Problem ağacı varsa → Peer Agent'a sor
-            # has_problem_tree=True ile ANALYSIS kategorisi devreye girer
-            # -----------------------------------------------
             if problem_tree:
+                # -----------------------------------------------
+                # Problem ağacı varsa → Peer Agent'a sor
+                # has_problem_tree=True ile ANALYSIS kategorisi devreye girer
+                # -----------------------------------------------
                 peer_result = await run_peer_agent(request.task, has_problem_tree=True)
 
                 if peer_result.get("response_type") == "analysis":
                     # Problem ağacı hakkında soru → Analysis Agent
-                    logger.info("[ROUTES] ANALYSIS kategorisi → Analysis Agent çalışıyor.")
+                    logger.info("[ROUTES] ANALYSIS → Analysis Agent çalışıyor.")
                     result = await run_analysis_agent(request.task, problem_tree)
 
-                    # Session'ı koru, problem ağacını sakla
-                    session_store[session_id] = {
+                    # Session'ı koru
+                    await save_session(session_id, {
                         "history": history,
                         "original_task": session_data.get("original_task", request.task),
                         "completed": True,
                         "problem_tree": problem_tree,
-                    }
+                    })
 
                 elif peer_result.get("response_type") == "redirect":
                     # Yeni problem → Discovery başlat
                     logger.info("[ROUTES] Yeni problem → Discovery başlatılıyor.")
-                    from app.agents.discovery_agent import run_discovery_agent as rda
-                    discovery_result = await rda(request.task, [])
+                    discovery_result = await run_discovery_agent(request.task, [])
                     peer_result["discovery"] = discovery_result
                     result = peer_result
 
-                    session_store[session_id] = {
+                    await save_session(session_id, {
                         "history": history,
                         "original_task": request.task,
                         "completed": False,
                         "problem_tree": {},
-                    }
+                    })
 
                 else:
                     # Greeting, direct_answer, out_of_scope
                     result = peer_result
-                    session_store[session_id] = {
-                        "history": [],
-                        "original_task": request.task,
-                        "completed": False,
-                        "problem_tree": {},
-                    }
+
+                    # Problem ağacı varsa koru
+                    await save_session(session_id, {
+                        "history": history,
+                        "original_task": session_data.get("original_task", request.task),
+                        "completed": True,
+                        "problem_tree": problem_tree,
+                    })
 
             else:
                 # -----------------------------------------------
@@ -139,19 +139,19 @@ async def execute_agent(request: TaskRequest):
                 result = final_state.get("final_result", {})
 
                 if result.get("response_type") == "redirect":
-                    session_store[session_id] = {
+                    await save_session(session_id, {
                         "history": history,
                         "original_task": request.task,
                         "completed": False,
                         "problem_tree": {},
-                    }
+                    })
                 else:
-                    session_store[session_id] = {
+                    await save_session(session_id, {
                         "history": [],
                         "original_task": request.task,
                         "completed": False,
                         "problem_tree": {},
-                    }
+                    })
 
         # -----------------------------------------------
         # DISCOVERY AGENT: Direkt çalıştır
@@ -159,35 +159,30 @@ async def execute_agent(request: TaskRequest):
         elif agent_type == "discovery_agent":
             original_task = session_data.get("original_task", request.task)
 
-            # Discovery agent'ı çalıştır
             result = await run_discovery_agent(original_task, history)
 
-            # Agent cevabını geçmişe ekle
             history.append({"role": "agent", "content": result.get("message", "")})
 
-            # Discovery tamamlandıysa structuring başlat
             is_done = result.get("is_complete", False)
             problem_tree = {}
 
             if is_done:
                 structuring_result = await run_structuring_agent(result)
                 result["structuring"] = structuring_result
-                # Problem ağacını kaydet
                 problem_tree = structuring_result
 
-            # Session'ı güncelle
-            session_store[session_id] = {
+            await save_session(session_id, {
                 "history": history,
                 "original_task": original_task,
                 "completed": is_done,
                 "problem_tree": problem_tree,
-            }
+            })
 
         else:
             raise HTTPException(status_code=400, detail="Bilinmeyen agent tipi.")
 
         # -----------------------------------------------
-        # MONGODB'YE KAYDET
+        # MONGODB'YE LOG KAYDET
         # -----------------------------------------------
         db = get_db()
         if db is not None:
