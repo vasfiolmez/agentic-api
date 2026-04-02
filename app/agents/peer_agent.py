@@ -64,6 +64,7 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
         Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
         - DIRECT_ANSWER: Business bilgi sorusu (rekabet, pazar, sektör trendleri)
         - REDIRECT: Business problemi (satış düşüşü, maliyet, operasyonel sorun)
+        - CODE: Kod yazma, script, algoritma veya yazılım geliştirme talebi
         - OUT_OF_SCOPE: Business dışı talep (yemek tarifi, eğlence, günlük yaşam)
         - GREETING: Selamlama, teşekkür, vedalaşma
         
@@ -106,6 +107,24 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
             "references": [],
             "redirected_to": "discovery_agent",
         }
+        
+    elif "CODE" in category:
+        return {
+            "response_type": "code",
+            "message": "",
+            "references": [],
+            "redirected_to": "code_agent",
+        }
+    
+    elif "ANALYSIS" in category:
+        # Problem ağacı hakkında soru
+        # routes.py bu kategoriyi yakalayıp Analysis Agent'a yönlendirecek
+        return {
+            "response_type": "analysis",
+            "message": "",
+            "references": [],
+            "redirected_to": "analysis_agent",
+        }
     
     elif "GREETING" in category:
         greeting_prompt = f"""
@@ -128,15 +147,7 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
             "references": [],
             "redirected_to": None,
         }
-    elif "ANALYSIS" in category:
-        # Problem ağacı hakkında soru
-        # routes.py bu kategoriyi yakalayıp Analysis Agent'a yönlendirecek
-        return {
-            "response_type": "analysis",
-            "message": "",
-            "references": [],
-            "redirected_to": "analysis_agent",
-        }
+    
 
     else:
         out_of_scope_prompt = f"""

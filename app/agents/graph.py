@@ -5,6 +5,7 @@ from app.agents.peer_agent import run_peer_agent
 from app.agents.discovery_agent import run_discovery_agent
 from app.agents.structuring_agent import run_structuring_agent
 from app.agents.analysis_agent import run_analysis_agent
+from app.agents.code_agent import run_code_agent
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,19 @@ async def analysis_node(state: AgentState) -> AgentState:
     state["final_result"] = result
     logger.info(f"[GRAPH] Analysis Node tamamlandı.")
     return state
+# -----------------------------------------------
+# NODE 5: CODE AGENT NODE
+# Kod yazma taleplerini karşılar
+# Temiz, çalışan ve açıklamalı kod üretir
+# -----------------------------------------------
+async def code_node(state: AgentState) -> AgentState:
+    logger.info(f"[GRAPH] Code Node çalışıyor.")
 
+    result = await run_code_agent(state["task"])
+
+    state["final_result"] = result
+    logger.info(f"[GRAPH] Code Node tamamlandı.")
+    return state
 
 # -----------------------------------------------
 # ROUTER 1: Peer Node sonrası nereye gidecek?
@@ -130,6 +143,10 @@ def route_peer(state: AgentState) -> Literal["analysis_node", "__end__"]:
     if response_type == "analysis":
         logger.info("[GRAPH] Peer → Analysis Node.")
         return "analysis_node"
+    
+    if response_type == "code":
+        logger.info("[GRAPH] Peer → Code Node.")
+        return "code_node"
 
     # Diğer durumlar → END
     logger.info(f"[GRAPH] Peer → END. Tip: {response_type}")
@@ -161,6 +178,15 @@ def build_graph():
     graph.add_node("discovery_node", discovery_node)
     graph.add_node("structuring_node", structuring_node)
     graph.add_node("analysis_node", analysis_node)
+    graph.add_node("code_node", code_node)
+
+     # Peer Agent'ın kategorize ettiği response_type'a göre yönlendirme
+     # Discovery → discovery_agent
+     # Code → code_agent
+     # Analysis → analysis_agent
+     # Greeting → greeting_response (peer içinde direkt cevaplanacak)
+     # Diğerleri → out_of_scope_response (peer içinde direkt cevaplanacak)
+
 
     # Başlangıç noktası
     graph.set_entry_point("peer_node")
@@ -173,6 +199,7 @@ def build_graph():
         route_peer,
         {
             "analysis_node": "analysis_node",
+            "code_node": "code_node",
             "__end__": END,
         }
     )
@@ -192,6 +219,7 @@ def build_graph():
     # Structuring ve Analysis bittikten sonra her zaman END
     graph.add_edge("structuring_node", END)
     graph.add_edge("analysis_node", END)
+    graph.add_edge("code_node", END)
 
     return graph.compile()
 
