@@ -41,7 +41,7 @@ REFERANSLAR: [varsa kaynaklar, yoksa boş bırak]
 """
 
 
-async def run_peer_agent(task: str) -> dict:
+async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
     logger.info(f"Peer Agent çalışıyor. Task: {task}")
 
     # Önce kategoriyi belirle
@@ -49,8 +49,11 @@ async def run_peer_agent(task: str) -> dict:
     Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
     - DIRECT_ANSWER: Business bilgi sorusu (rekabet, pazar, sektör trendleri)
     - REDIRECT: Business problemi (satış düşüşü, maliyet, operasyonel sorun)
-    - OUT_OF_SCOPE: Business dışı talep
+     - OUT_OF_SCOPE: Business dışı talep (yemek tarifi, eğlence, günlük yaşam gibi)
     - GREETING: Selamlama, teşekkür, vedalaşma veya genel konuşma
+    - ANALYSIS: Problem ağacı, ana neden, alt neden, problem analizi veya daha önce yapılan analiz hakkında soru
+
+    {"ÖNEMLİ: Kullanıcının daha önce oluşturulmuş bir problem ağacı var. Ana neden, alt neden veya analiz hakkındaki her türlü soru ANALYSIS kategorisine girer." if has_problem_tree else ""}
     
     Talep: {task}
     
@@ -94,11 +97,29 @@ async def run_peer_agent(task: str) -> dict:
         }
     
     elif "GREETING" in category:
+        greeting_prompt = f"""
+        Kullanıcı şunu söyledi: {task}
+        
+        Bu bir selamlama, teşekkür veya vedalaşma mesajı.
+        Kısa, samimi ve profesyonel bir business asistanı gibi karşılık ver.
+        Gerekirse başka bir business sorusu sormaya davet et.
+        Türkçe yaz.
+        """
+        greeting_response = await llm.ainvoke(greeting_prompt)
         return {
             "response_type": "greeting",
-            "message": "Rica ederim! Başka bir business sorunuz olursa yardımcı olmaktan memnuniyet duyarım. 🤝",
+            "message": greeting_response.content,
             "references": [],
             "redirected_to": None,
+        }
+    elif "ANALYSIS" in category:
+        # Problem ağacı hakkında soru
+        # routes.py bu kategoriyi yakalayıp Analysis Agent'a yönlendirecek
+        return {
+            "response_type": "analysis",
+            "message": "",
+            "references": [],
+            "redirected_to": "analysis_agent",
         }
 
     else:
