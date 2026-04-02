@@ -2,7 +2,7 @@ import logging
 import uuid
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import TaskRequest, AgentType
-from app.agents.peer_agent import run_peer_agent
+from app.agents.graph import agent_graph
 from app.agents.discovery_agent import run_discovery_agent
 from app.agents.structuring_agent import run_structuring_agent
 from app.core.database import get_db
@@ -11,12 +11,16 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Oturum geçmişlerini bellekte tut
+# -----------------------------------------------
+# SESSION STORE
+# Kullanıcıların konuşma geçmişini bellekte tutar
+# -----------------------------------------------
 session_store = {}
 
 
 @router.post("/agent/execute")
 async def execute_agent(request: TaskRequest):
+
     # Boş görev kontrolü
     if not request.task or request.task.strip() == "":
         raise HTTPException(status_code=400, detail="Görev boş olamaz.")
@@ -26,82 +30,111 @@ async def execute_agent(request: TaskRequest):
     logger.info(f"Session: {session_id} | Agent: {request.agent_type} | Task: {request.task}")
 
     try:
-        # Hangi agent çalışacak?
-        if request.agent_type == AgentType.PEER:
-            result = await run_peer_agent(request.task)
+        # Mevcut session geçmişini al
+        session_data = session_store.get(session_id, {
+            "history": [],
+            "original_task": request.task,
+            "completed": False,
+        })
 
-            # Peer agent redirect dönüyorsa discovery başlat
+        # Kullanıcı mesajını geçmişe ekle
+        history = session_data.get("history", [])
+        history.append({"role": "user", "content": request.task})
+
+        # -----------------------------------------------
+        # PEER AGENT: Graph ile çalıştır
+        # -----------------------------------------------
+        if request.agent_type == AgentType.PEER:
+
+            # Discovery tamamlandıysa yeni soruyu peer'a yönlendir
+            if session_data.get("completed"):
+                logger.info("[ROUTES] Discovery tamamlandı, Peer Agent çalışıyor.")
+
+            initial_state = {
+                "task": request.task,
+                "session_id": session_id,
+                "agent_type": str(request.agent_type),
+                "conversation_history": history,
+                "original_task": request.task,
+                "peer_result": {},
+                "discovery_result": {},
+                "structuring_result": {},
+                "is_complete": False,
+                "final_result": {},
+            }
+
+            # LangGraph graph'ı çalıştır
+            final_state = await agent_graph.ainvoke(initial_state)
+            result = final_state.get("final_result", {})
+
+            # Eğer redirect ise session'ı discovery moduna al
             if result.get("response_type") == "redirect":
                 session_store[session_id] = {
-                    "agent": "discovery",
-                    "history": [],
+                    "history": history,
                     "original_task": request.task,
+                    "completed": False,
                 }
-                discovery_result = await run_discovery_agent(
-                    request.task,
-                    conversation_history=[],
-                )
-                result["discovery"] = discovery_result
+            else:
+                session_store[session_id] = {
+                    "history": history,
+                    "original_task": request.task,
+                    "completed": False,
+                }
 
+        # -----------------------------------------------
+        # DISCOVERY AGENT: Direkt çalıştır
+        # Graph'ı bypass et, discovery node'u çağır
+        # -----------------------------------------------
         elif request.agent_type == AgentType.DISCOVERY:
-            # Mevcut session geçmişini al
-            session_data = session_store.get(session_id, {
-                "history": [],
-                "original_task": request.task,
-                "completed":False,
-            })
+
+            # Discovery tamamlandıysa peer'a yönlendir
             if session_data.get("completed"):
+                logger.info("[ROUTES] Discovery tamamlandı, Peer Agent'a yönlendiriliyor.")
+                from app.agents.peer_agent import run_peer_agent
                 result = await run_peer_agent(request.task)
+                session_store[session_id] = {
+                    "history": history,
+                    "original_task": session_data.get("original_task", request.task),
+                    "completed": True,
+                }
                 return {
                     "session_id": session_id,
                     "agent_type": "peer_agent",
                     "result": result,
                 }
 
-            history = session_data.get("history", [])
             original_task = session_data.get("original_task", request.task)
 
-            # Kullanıcı mesajını geçmişe ekle
-            history.append({"role": "user", "content": request.task})
-
-            # Discovery agent çalıştır
+            # Discovery agent'ı direkt çalıştır
             result = await run_discovery_agent(original_task, history)
 
             # Agent cevabını geçmişe ekle
             history.append({"role": "agent", "content": result.get("message", "")})
 
-            # Session'ı güncelle
-            session_store[session_id] = {
-                "agent": "discovery",
-                "history": history,
-                "original_task": original_task,
-                "completed": result.get("is_complete", False),
-            }
-
             # Discovery tamamlandıysa structuring başlat
-            if result.get("is_complete"):
+            is_done = result.get("is_complete", False)
+            if is_done:
                 structuring_result = await run_structuring_agent(result)
                 result["structuring"] = structuring_result
 
-        elif request.agent_type == AgentType.STRUCTURING:
-            # Direkt structuring çalıştır
-            session_data = session_store.get(session_id, {})
-            if not session_data:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Önce Discovery Agent ile konuşma başlatmalısınız."
-                )
-            result = await run_structuring_agent(session_data)
+            # Session'ı güncelle
+            session_store[session_id] = {
+                "history": history,
+                "original_task": original_task,
+                "completed": is_done,
+            }
 
         else:
             raise HTTPException(status_code=400, detail="Bilinmeyen agent tipi.")
 
-        # MongoDB'ye kaydet
+        # -----------------------------------------------
+        # MONGODB'YE KAYDET
+        # -----------------------------------------------
         db = get_db()
         if db is not None:
             log_entry = {
                 "session_id": session_id,
-                "agent_type": request.agent_type,
+                "agent_type": str(request.agent_type),
                 "input_task": request.task,
                 "output": result,
                 "timestamp": datetime.utcnow(),
