@@ -50,6 +50,10 @@ async def run_structuring_agent(discovery_output: dict) -> dict:
     - 3-5 ana neden belirle
     - Her ana neden için 2-3 alt neden yaz
     - Türkçe yaz
+    - Alt nedenler kısa ve öz olmalı, maksimum 5-7 kelime
+    - Alt nedenler tek cümle değil, kısa bir başlık gibi olmalı
+    - Örnek doğru alt neden: "Hedefleme yanlış", "Reklam optimizasyonu zayıf"
+    - Örnek yanlış alt neden: "Müşterinin dijital reklam stratejisinin hiệu quả olmaması nedeniyle maliyetler artmıştır"
     
     GİRDİLER:
     Müşterinin ifade ettiği problem: {customer_stated_problem}

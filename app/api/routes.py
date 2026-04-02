@@ -181,6 +181,13 @@ async def execute_agent(request: TaskRequest):
         else:
             raise HTTPException(status_code=400, detail="Bilinmeyen agent tipi.")
 
+
+
+# Response type'a göre agent_type güncelle
+        if isinstance(result, dict) and result.get("response_type") == "code":
+            agent_type = "code_agent"
+        elif isinstance(result, dict) and result.get("response_type") == "analysis":
+            agent_type = "analysis_agent"
         # -----------------------------------------------
         # MONGODB'YE LOG KAYDET
         # -----------------------------------------------
