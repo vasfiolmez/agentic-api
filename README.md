@@ -331,16 +331,17 @@ POST /api/v1/agent/execute
 ```json
 POST /api/v1/agent/execute
 {
-  "task": "Merhaba",
-  "session_id": "your-session-id"
+  "task": "Merhaba"
 }
 ```
-#### 5. Out of Scope
+
+#### 6. Out of Scope
 ```json
 POST /api/v1/agent/execute
 {
-  "task":  "Can you give me a pizza recipe?" 
+  "task": "Can you give me a pizza recipe?"
 }
+```
 
 ---
 
@@ -373,6 +374,8 @@ pytest tests/ -v
 - `test_empty_task` — Empty task validation
 - `test_peer_agent_out_of_scope` — Non-business request handling
 - `test_peer_agent_direct_answer` — Business knowledge query
+- `test_peer_agent_redirect` — Business problem redirects to discovery agent
+- `test_code_agent` — Code generation request handling
 
 ### Expanding Test Coverage
 To improve coverage, consider adding:
