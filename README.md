@@ -35,17 +35,11 @@ While the assessment required a base of 3 agents, I took the initiative to desig
 
 ### Agent Flow Diagram
 
-```
-statics/diagram2.png
-
-```
+![Agent Flow Diagram](statics/diagram2.png)
 
 ### LangGraph State Machine
 
-```
-statics/diagram.png
-
-```
+![LangGraph State Machine](statics/diagram.png)
 
 ### Queue Architecture (Planned)
 
