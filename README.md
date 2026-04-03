@@ -4,6 +4,13 @@
 
 ---
 
+## 🌐 Live Demo
+
+API is live at: **http://16.16.67.157:8001**
+
+- Swagger UI: http://16.16.67.157:8001/docs
+- Health Check: http://16.16.67.157:8001/health
+
 ## ✨ Features
 
 - **Intelligent Task Routing** — Peer Agent automatically categorizes and routes requests to the right agent
