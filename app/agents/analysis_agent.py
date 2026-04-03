@@ -7,7 +7,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 # -----------------------------------------------
-# LLM ve SEARCH TOOL KURULUMU
+# LLM AND SEARCH TOOL SETUP
 # -----------------------------------------------
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
@@ -21,20 +21,19 @@ search_tool = TavilySearch(max_results=3)
 
 
 async def run_analysis_agent(task: str, problem_tree: dict) -> dict:
-    logger.info(f"Analysis Agent çalışıyor. Task: {task}")
+    logger.info(f"Analysis Agent running. Task: {task}")
 
     # -----------------------------------------------
-    # PROBLEM AĞACINI FORMATLA
-    # Dict formatındaki problem ağacını okunabilir
-    # metne çevir, LLM'e context olarak ver
+    # FORMAT PROBLEM TREE
+    # Convert dict to readable text for LLM context
     # -----------------------------------------------
     problem_tree_text = ""
     if problem_tree:
         problem_type = problem_tree.get("problem_type", "")
         main_problem = problem_tree.get("main_problem", "")
-        problem_tree_text = f"Problem Tipi: {problem_type}\n"
-        problem_tree_text += f"Ana Problem: {main_problem}\n\n"
-        problem_tree_text += "Problem Ağacı:\n"
+        problem_tree_text = f"Problem Type: {problem_type}\n"
+        problem_tree_text += f"Main Problem: {main_problem}\n\n"
+        problem_tree_text += "Problem Tree:\n"
 
         for node in problem_tree.get("problem_tree", []):
             root_cause = node.get("root_cause", "")
@@ -43,41 +42,46 @@ async def run_analysis_agent(task: str, problem_tree: dict) -> dict:
                 problem_tree_text += f"  - {sub_cause}\n"
 
     # -----------------------------------------------
-    # WEB'DEN EK BİLGİ AL
-    # Kullanıcının sorusuna göre güncel bilgi çek
+    # GET ADDITIONAL WEB INFORMATION
     # -----------------------------------------------
     search_results = search_tool.invoke(task)
-    web_content = "\n".join(
-        [r.get("content", "") for r in search_results if isinstance(r, dict)]
-    )
+    if isinstance(search_results, dict):
+        results_list = search_results.get("results", [])
+    elif isinstance(search_results, list):
+        results_list = search_results
+    else:
+        results_list = []
+
+    web_content = "\n".join([r.get("content", "") for r in results_list if isinstance(r, dict)])
 
     # -----------------------------------------------
     # ANALYSIS AGENT PROMPT
-    # Problem ağacını context olarak kullanarak
-    # kullanıcının sorusunu cevapla
+    # Uses problem tree as context to answer questions
     # -----------------------------------------------
     analysis_prompt = f"""
-    Sen bir Problem Analysis Agent'sın.
-    Görevin müşterinin daha önce oluşturulan problem ağacını analiz ederek
-    sorularını cevaplamak ve derinlemesine içgörüler sunmaktır.
+    You are a Problem Analysis Agent.
+    Your goal is to analyze the customer's previously generated problem tree
+    and provide deep insights and answers to their questions.
     
-    KURALLAR:
-    - Sadece problem ağacındaki bilgileri kullan
-    - Gerekirse web'den aldığın bilgilerle zenginleştir
-    - Kısa, net ve yapılandırılmış cevap ver
-    - Yeni problem keşfi yapma
-    - Türkçe yaz
+    RULES:
+    - Use the problem tree as your primary context
+    - Enrich your answer with web information if relevant
+    - Provide a short, clear and structured response
+    - Do NOT start new problem discovery
+    - Reference specific root causes and sub-causes from the problem tree
+    - Respond in Turkish language
     
-    MEVCUT PROBLEM AĞACI:
+    PROBLEM TREE CONTEXT:
     {problem_tree_text}
     
-    WEB'DEN EK BİLGİ:
+    ADDITIONAL WEB INFORMATION:
     {web_content}
     
-    MÜŞTERİNİN SORUSU:
+    CUSTOMER QUESTION:
     {task}
     
-    Soruyu problem ağacı bağlamında cevapla.
+    Answer the question in the context of the problem tree.
+    Use bullet points and bold text for clarity.
     """
 
     response = await llm.ainvoke(analysis_prompt)

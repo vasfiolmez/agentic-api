@@ -26,8 +26,6 @@ async def run_discovery_agent(task: str, conversation_history: list = []) -> dic
 
     # -----------------------------------------------
     # KONUŞMA GEÇMİŞİNİ FORMATLA
-    # Liste halindeki mesajları okunabilir metne çevir
-    # Örnek: "Kullanıcı: Satışlarım düşüyor\nAgent: Ne zamandır?"
     # -----------------------------------------------
     history_text = ""
     if conversation_history:
@@ -37,65 +35,43 @@ async def run_discovery_agent(task: str, conversation_history: list = []) -> dic
 
     # -----------------------------------------------
     # YETERLİ BİLGİ KONTROLÜ
-    # 6 mesaja ulaşınca (yaklaşık 3 soru-cevap turu)
-    # soru sormayı bırak, çıktı üretmeye geç
     # -----------------------------------------------
     if conversation_history and len(conversation_history) >= 6:
         return await _generate_discovery_output(task, conversation_history)
 
     # -----------------------------------------------
     # SORU ÜRET
-    # Müşterinin cevaplarına göre follow-up sorular üret
-    # Konuşma geçmişi yoksa ilk soruları sor
     # -----------------------------------------------
     question_prompt = f"""
-    Sen bir Business Sense Discovery Agent'sın.
-    Görevin müşterinin business problemini derinlemesine anlamak için sorular sormaktır.
+    ROLE: Expert Business Sense Discovery Agent
+    CONTEXT: You are conducting a diagnostic interview with a client to deeply understand their business problem before any solution is offered.
+    OBJECTIVE: Ask insightful, probing questions to uncover the true root cause rather than just the surface-level symptoms.
+
+    CONSTRAINTS:
+    - NEVER propose solutions or offer advice; your ONLY job right now is to understand the problem.
+    - Ask a MAXIMUM of 2 questions per turn.
+    - Analyze the "Conversation History" and generate highly relevant follow-up questions based on the client's previous answers.
+    - Keep the questions concise, professional, and clear.
+    - Output Language: Turkish.
+
+    QUESTIONING FRAMEWORK (Use these themes to guide your questions):
+    1. Problem Definition:
+       - What is the main problem disrupting your business right now?
+       - Which department is directly affected by this issue?
+       - When did this problem first appear?
+       - How are you currently managing or mitigating this problem?
+    2. Real Need vs. Surface Want:
+       - Are you looking for an immediate solution, or do you want to understand the root cause first?
+       - What solutions have you tried so far, and why did they fail?
+       - Do you actually need a new solution, or is there a lack of visibility/data?
+
+    USER'S INITIAL REQUEST: {task}
     
-    KURALLAR:
-    - Çözüm önerme, sadece soru sor
-    - Her seferinde maksimum 2 soru sor
-    - Önceki cevaplara göre follow-up sorular üret
-    - Sorular kısa ve net olsun
-    - Türkçe yaz
-    
-    PROBLEM TANIMLAMA SORULARI (bu konularda soru sor):
-    - Şu an yaşadığınız ana işi aksatan problem nedir?
-    - Bu problem hangi departmanı doğrudan etkiliyor?
-    - Bu sorun ilk ne zaman ortaya çıktı?
-    - Şu an bu problemi nasıl yönetiyorsunuz?
-    
-    GERÇEK İHTİYAÇ SORULARI (bu konularda soru sor):
-    - Çözüm mü istiyorsunuz yoksa önce sebebi mi anlamak istiyorsunuz?
-    - Bugüne kadar denediğiniz çözümler neler oldu? Neden başarısız oldu?
-    - Aslında çözüme mi ihtiyacınız var yoksa görünürlük mü eksik?
-    
-    ÖRNEK MÜŞTERİ CEVAPLARI VE BAĞLAMLARI:
-    
-    Pazarlama Kaynaklı Problem:
-    - "Reklamlarımız eskisi kadar performans göstermiyor"
-    - "Hedef kitlemize doğru ulaşamıyoruz"
-    - "Dijital kampanyalarımızın dönüşüm oranı çok düşük"
-    - "Pazarlama bütçemizi verimli kullanamıyoruz"
-    
-    Rekabet Kaynaklı Problem:
-    - "Rakiplerimiz bizden daha agresif fiyatlar sunuyor"
-    - "Rakipler yeni özellikler çıkardı, biz geride kaldık"
-    - "Müşteriler rakiplerin kampanyalarına yöneliyor"
-    - "Pazar son 1 yılda çok sıkılaştı"
-    
-    Ürün ve Değer Önerisi Kaynaklı Problem:
-    - "Ürünümüz artık müşterilerin beklentilerini tam karşılamıyor olabilir"
-    - "Ürün farklılaşması konusunda rakiplerin gerisinde kaldık"
-    - "Yeni müşteriler ürünün değerini anlamakta zorlanıyor"
-    - "Fiyat-değer dengemiz müşterilere yüksek geliyor"
-    
-    Müşterinin ilk talebi: {task}
-    
-    Önceki konuşma:
-    {history_text if history_text else "Henüz konuşma yok, ilk soruları sor."}
-    
-    Şimdi müşteriye 2 soru sor. Sadece soruları yaz, başka açıklama yapma.
+    CONVERSATION HISTORY:
+    {history_text if history_text else "No history yet. Ask the initial discovery questions."}
+
+    OUTPUT FORMAT:
+    Output ONLY the questions. Do not include introductory text, explanations, markdown blocks, or pleasantries.
     """
 
     response = await llm.ainvoke(question_prompt)
@@ -120,36 +96,43 @@ async def _generate_discovery_output(task: str, conversation_history: list) -> d
 
     # -----------------------------------------------
     # WEB'DEN EK BİLGİ AL
-    # Tavily ile konuyla ilgili güncel bilgi çek
     # -----------------------------------------------
     search_results = search_tool.invoke(task)
-    web_content = "\n".join([r.get("content", "") for r in search_results if isinstance(r, dict)])
+    if isinstance(search_results, dict):
+        results_list = search_results.get("results", [])
+    elif isinstance(search_results, list):
+        results_list = search_results
+    else:
+        results_list = []
+
+    web_content = "\n".join([r.get("content", "") for r in results_list if isinstance(r, dict)])
 
     output_prompt = f"""
-    Sen bir Business Sense Discovery Agent'sın.
-    Aşağıdaki müşteri konuşmasını analiz ederek yapılandırılmış çıktı üret.
-    
-    Müşterinin ilk talebi: {task}
-    
-    Tüm konuşma:
+    ROLE: Expert Business Diagnostician
+    CONTEXT: The diagnostic Q&A phase with the client has concluded.
+    OBJECTIVE: Synthesize the entire conversation and supplementary web context into a highly structured diagnostic report.
+
+    USER'S INITIAL REQUEST: {task}
+
+    CONVERSATION HISTORY:
     {history_text}
-    
-    Web'den ek bilgi:
+
+    SUPPLEMENTARY WEB CONTEXT:
     {web_content}
-    
-    Şu formatta çıktı üret (Türkçe):
-    
-    CUSTOMER_STATED_PROBLEM: [müşterinin kendi ifadesiyle problemi tek cümleyle yaz]
-    IDENTIFIED_BUSINESS_PROBLEM: [senin netleştirdiğin gerçek iş problemi]
-    HIDDEN_ROOT_RISK: [müşterinin söylemediği ama risk oluşturan gizli problem]
-    CUSTOMER_CHAT_SUMMARY: [tüm konuşmanın özeti, hiçbir detay kaybolmasın]
-    QUESTIONS_ASKED: [konuşmada Agent tarafından sorulan tüm soruları tek tek yaz, her soru yeni satırda, soru işareti ile bitsin]
+
+    CONSTRAINTS:
+    - Extract and deduce the necessary information accurately based ONLY on the provided context.
+    - Ensure every requested field is populated.
+    - Output Language for the content: Turkish.
+    - You MUST adhere strictly to the exact keys provided in the OUTPUT FORMAT. Do not add markdown formatting, extra spacing, or conversational text.
+
+    OUTPUT FORMAT:
+    CUSTOMER_STATED_PROBLEM: [Write the problem exactly as the customer described it, in a single sentence]
+    IDENTIFIED_BUSINESS_PROBLEM: [Write the actual, underlying business problem that you have diagnosed]
+    HIDDEN_ROOT_RISK: [Identify a latent or hidden risk/problem that the customer did not explicitly state but exists]
+    CUSTOMER_CHAT_SUMMARY: [Write a comprehensive summary of the entire conversation; do not omit critical details]
+    QUESTIONS_ASKED: [List every single question the Agent asked during the conversation, each on a new line, ending with a question mark]
     END_QUESTIONS
-    
-    ÖNEMLİ:
-    - Her alan için sadece o alanın içeriğini yaz
-    - QUESTIONS_ASKED boş bırakma, tüm soruları yaz
-    - QUESTIONS_ASKED bittikten sonra END_QUESTIONS yaz
     """
 
     response = await llm.ainvoke(output_prompt)
@@ -157,7 +140,6 @@ async def _generate_discovery_output(task: str, conversation_history: list) -> d
 
     # -----------------------------------------------
     # TEK SATIRLI ALANLARI PARSE ET
-    # field: değer formatındaki alanları çıkar
     # -----------------------------------------------
     def extract_field(text, field):
         try:
@@ -171,7 +153,6 @@ async def _generate_discovery_output(task: str, conversation_history: list) -> d
 
     # -----------------------------------------------
     # ÇOKLU SATIRLI ALANLARI PARSE ET
-    # QUESTIONS_ASKED gibi çok satır içeren alanlar için
     # -----------------------------------------------
     def extract_multiline_field(text, start_field, end_marker):
         try:
@@ -190,7 +171,6 @@ async def _generate_discovery_output(task: str, conversation_history: list) -> d
         "identified_business_problem": extract_field(content, "IDENTIFIED_BUSINESS_PROBLEM"),
         "hidden_root_risk": extract_field(content, "HIDDEN_ROOT_RISK"),
         "customer_chat_summary": extract_field(content, "CUSTOMER_CHAT_SUMMARY"),
-        # Çok satırlı alan — END_QUESTIONS marker'ına kadar al
         "questions_asked": extract_multiline_field(content, "QUESTIONS_ASKED", "END_QUESTIONS"),
         "message": "Problem keşif aşaması tamamlandı. Problem yapılandırma başlıyor...",
     }

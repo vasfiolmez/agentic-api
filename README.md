@@ -16,6 +16,13 @@
 - **Web Search Integration** — Real-time business intelligence via Tavily
 
 ---
+## 💡 Initiative Taken (Beyond the Requirements)
+While the assessment required a base of 3 agents, I took the initiative to design a highly extensible architecture by introducing two additional specialized nodes:
+- **Code Agent:** Demonstrates how easily a non-business module can be integrated into the existing routing logic with a specialized `temperature=0.1` LLM setup for deterministic outputs.
+- **Analysis Agent:** Closes the loop on the user experience. Instead of just generating a Problem Tree and stopping, the user can ask follow-up questions about the generated tree using it as RAG context.
+- **Strict Intent Classification:** I decoupled the routing logic from the conversational logic to prevent the LLM from hallucinating conversational text during crucial routing steps.
+
+---
 
 ## 🏗️ Architecture
 
@@ -204,6 +211,7 @@ Generates clean, documented, production-ready code with error handling.
 | **Temperature Control** | 0.3 for consistency; 0.1 for code generation |
 | **Chain of Thought** | Structuring agent reasons through problem types |
 | **Context Injection** | Session history and problem tree passed as context |
+| **Strict Output Parsing** | Forced the LLM to skip markdown blocks (```) to guarantee 100% stable string parsing. |
 
 ### Temperature Strategy
 - **0.3** — Business agents (consistent, focused responses)
@@ -370,6 +378,11 @@ Required GitHub Secrets:
 - `AWS_SECRET_ACCESS_KEY`
 - `S3_BUCKET`
 
+**Deployment Scripts Included:**
+As requested in the technical assessment, the repository includes structural DevOps files:
+- `appspec.yml`: AWS CodeDeploy configuration.
+- `scripts/`: Contains `BeforeInstall`, `start_application`, and `stop_application` bash scripts for seamless server deployments.
+
 ---
 
 ## 🏭 Production Recommendations
@@ -399,17 +412,6 @@ POST /api/v1/agent/execute
         ↓
 GET /api/v1/task/{task_id}
 ```
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
 ---
 
 ## 📄 License

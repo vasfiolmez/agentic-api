@@ -14,85 +14,75 @@ llm = ChatGroq(
     temperature=0.3,
 )
 
-os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 search_tool = TavilySearch(max_results=3)
-
-PEER_AGENT_PROMPT = """
-Sen bir Business Peer Agent'sın. Görevin kullanıcının talebini analiz etmek ve doğru aksiyonu almaktır.
-
-Kullanıcının talebi 3 kategoriden birine girer:
-
-1. DIRECT_ANSWER: Business bilgi sorusu (rekabet analizi, pazar trendleri, sektör bilgisi)
-   → İnternetten ara, kısa ve net cevap ver, referansları ekle.
-
-2. REDIRECT: Business problemi içeriyor (satış düşüşü, maliyet artışı, operasyonel sorun)
-   → Kullanıcıyı Discovery Agent'a yönlendir, soru sorma.
-
-3. OUT_OF_SCOPE: Business dışı talep (tarif, eğlence, günlük yaşam vb.)
-   → Sistemin business odaklı çalıştığını açıkla, örnek business soruları sun.
-
-Kullanıcının talebi: {task}
-
-Önce kategoriyi belirle, sonra aksiyonu al.
-Cevabını şu formatta ver:
-KATEGORI: [DIRECT_ANSWER/REDIRECT/OUT_OF_SCOPE]
-MESAJ: [cevabın]
-REFERANSLAR: [varsa kaynaklar, yoksa boş bırak]
-"""
 
 
 async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
-    logger.info(f"Peer Agent çalışıyor. Task: {task}")
+    logger.info(f"Peer Agent running. Task: {task}")
 
-    # Önce kategoriyi belirle
     if has_problem_tree:
         category_prompt = f"""
-        Kullanıcının daha önce oluşturulmuş bir problem ağacı var.
-        Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
+        The user has a previously generated problem tree.
         
-        - ANALYSIS: Problem ağacındaki herhangi bir konu, ana neden, alt neden hakkında soru veya açıklama isteği. Bu kategoriyi seç eğer soru problem ağacıyla ilgiliyse.
-        - REDIRECT: Tamamen yeni ve farklı bir business problemi (öncekiyle alakasız yeni bir sorun)
-        - GREETING: Selamlama, teşekkür, vedalaşma
-        - DIRECT_ANSWER: Problem ağacıyla alakasız genel business bilgi sorusu
-        - OUT_OF_SCOPE: Yemek, film, müzik gibi tamamen iş dışı konular
+        RULE: If the question is related to business or strategy and could be connected to the problem tree, ALWAYS select ANALYSIS!
         
-        ÖNEMLİ: Eğer soruda "ana neden", "açıklar mısın", "detay ver", "nedir" gibi ifadeler varsa ve problem ağacıyla ilgiliyse mutlaka ANALYSIS seç!
+        Only select a category other than ANALYSIS in these cases:
+        - Defining a completely new and different business problem → REDIRECT
+        - Greeting or farewell → GREETING
+        - Completely non-business topic like food, music, movies → OUT_OF_SCOPE
         
-        Talep: {task}
-        Sadece kategori adını yaz.
+        All other business questions → ANALYSIS
+        
+        Task: {task}
+        Write only the category name.
         """
-        
     else:
         category_prompt = f"""
-        Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
-        - DIRECT_ANSWER: Business bilgi sorusu (rekabet, pazar, sektör trendleri)
-        - REDIRECT: Business problemi (satış düşüşü, maliyet, operasyonel sorun)
-        - CODE: Kod yazma, script, algoritma veya yazılım geliştirme talebi
-        - OUT_OF_SCOPE: Business dışı talep (yemek tarifi, eğlence, günlük yaşam)
-        - GREETING: Selamlama, teşekkür, vedalaşma
+        Analyze the following request and write only the category name:
+        - DIRECT_ANSWER: Business knowledge question (competition, market, sector trends)
+        - REDIRECT: Business problem (sales decline, cost increase, operational issue)
+        - CODE: Code writing, scripting, algorithm or software development request
+        - OUT_OF_SCOPE: Non-business and non-code request (recipes, entertainment, daily life)
+        - GREETING: Greeting, thank you, farewell or general conversation
         
-        Talep: {task}
-        Sadece kategori adını yaz.
+        Task: {task}
+        
+        Write only the category name, nothing else.
         """
 
     category_response = await llm.ainvoke(category_prompt)
     category = category_response.content.strip().upper()
 
-    logger.info(f"Peer Agent kategori: {category}")
+    logger.info(f"Peer Agent category: {category}")
 
     if "DIRECT_ANSWER" in category:
-        # Web'de ara
         search_results = search_tool.invoke(task)
-        references = [r.get("url", "") for r in search_results if isinstance(r, dict)]
-        content = "\n".join([r.get("content", "") for r in search_results if isinstance(r, dict)])
+        logger.info(f"Search results raw: {type(search_results)}")
+        
+        # Tavily farklı formatlarda dönebilir
+        if isinstance(search_results, dict):
+            results_list = search_results.get("results", [])
+        elif isinstance(search_results, list):
+            results_list = search_results
+        else:
+            results_list = []
+        
+        references = [r.get("url", "") for r in results_list if isinstance(r, dict)]
+        content = "\n".join([r.get("content", "") for r in results_list if isinstance(r, dict)])
+        logger.info(f"References found: {len(references)}")
 
         answer_prompt = f"""
-        Kullanıcı şunu sordu: {task}
+        You are a professional business analyst assistant.
         
-        Web'den bulunan bilgiler:
+        The user asked: {task}
+        
+        Information found on the web:
         {content}
         
-        Kısa, net ve yapılandırılmış bir business cevabı ver. Türkçe yaz.
+        Provide a short, clear and structured business answer.
+        - Use bullet points or numbered lists where appropriate
+        - Include key insights and trends
+        - Respond in Turkish language
         """
         answer = await llm.ainvoke(answer_prompt)
 
@@ -110,7 +100,7 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
             "references": [],
             "redirected_to": "discovery_agent",
         }
-        
+
     elif "CODE" in category:
         return {
             "response_type": "code",
@@ -118,30 +108,18 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
             "references": [],
             "redirected_to": "code_agent",
         }
-    
-    elif "ANALYSIS" in category:
-        # Problem ağacı hakkında soru
-        # routes.py bu kategoriyi yakalayıp Analysis Agent'a yönlendirecek
-        return {
-            "response_type": "analysis",
-            "message": "",
-            "references": [],
-            "redirected_to": "analysis_agent",
-        }
-    
+
     elif "GREETING" in category:
         greeting_prompt = f"""
-        Kullanıcı şunu söyledi: {task}
+        You are a professional business assistant.
+        The user said: {task}
         
-        KURALLAR:
-        - Kullanıcının mesajına uygun şekilde karşılık ver
-        - Eğer teşekkür ettiyse → teşekkürü kabul et
-        - Eğer selamlama yaptıysa → selamla
-        - Eğer vedalaştıysa → güle güle de
-        - "Merhaba" ile başlama, kullanıcının mesajına göre doğal bir giriş yap
-        - Kısa ve samimi ol
-        - Gerekirse başka bir business sorusu sormaya davet et
-        - Türkçe yaz
+        This is a greeting, thank you, or farewell message.
+        Respond naturally and warmly.
+        - Do NOT start with "Merhaba" if the user said thank you
+        - Keep it short and professional
+        - If appropriate, invite them to ask another business question
+        - Respond in Turkish language
         """
         greeting_response = await llm.ainvoke(greeting_prompt)
         return {
@@ -150,15 +128,24 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
             "references": [],
             "redirected_to": None,
         }
-    
+
+    elif "ANALYSIS" in category:
+        return {
+            "response_type": "analysis",
+            "message": "",
+            "references": [],
+            "redirected_to": "analysis_agent",
+        }
 
     else:
         out_of_scope_prompt = f"""
-        Kullanıcı şunu istedi: {task}
+        You are a professional business assistant.
+        The user requested: {task}
         
-        Bu sistem sadece business ve strateji problemleri için tasarlanmıştır.
-        Kullanıcıya bunu nazikçe açıkla ve aynı konuyu business perspektifine çevirebileceği 2-3 örnek soru sun.
-        Türkçe yaz.
+        This system is designed only for business and strategy problems.
+        - Politely explain that this is outside the system's scope
+        - Offer 2-3 example questions that reframe the same topic from a business perspective
+        - Respond in Turkish language
         """
         response = await llm.ainvoke(out_of_scope_prompt)
 
