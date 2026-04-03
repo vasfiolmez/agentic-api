@@ -69,34 +69,37 @@ async def run_structuring_agent(discovery_output: dict) -> dict:
     Şu formatta çıktı üret:
     
     PROBLEM_TIPI: [sadece şunlardan birini yaz: Growth, Cost, Operational, Technology, Regulation, Organizational, Hybrid]
-    ANA_PROBLEM: [ana problem başlığı]
+    ANA_PROBLEM: [ana problem başlığı, maksimum 5 kelime]
     
-    ANA_NEDEN_1: [birinci ana neden]
-    ALT_NEDEN_1_1: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_1_2: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_1_3: [somut ve açıklayıcı bir cümle]
+    ANA_NEDEN_1: [birinci ana neden, maksimum 5 kelime]
+    ALT_NEDEN_1_1: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_1_2: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_1_3: [maksimum 5 kelime, öz ve net]
     
-    ANA_NEDEN_2: [ikinci ana neden]
-    ALT_NEDEN_2_1: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_2_2: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_2_3: [somut ve açıklayıcı bir cümle]
+    ANA_NEDEN_2: [ikinci ana neden, maksimum 5 kelime]
+    ALT_NEDEN_2_1: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_2_2: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_2_3: [maksimum 5 kelime, öz ve net]
     
-    ANA_NEDEN_3: [üçüncü ana neden]
-    ALT_NEDEN_3_1: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_3_2: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_3_3: [somut ve açıklayıcı bir cümle]
+    ANA_NEDEN_3: [üçüncü ana neden, maksimum 5 kelime]
+    ALT_NEDEN_3_1: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_3_2: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_3_3: [maksimum 5 kelime, öz ve net]
     
-    ANA_NEDEN_4: [dördüncü ana neden]
-    ALT_NEDEN_4_1: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_4_2: [somut ve açıklayıcı bir cümle]
+    ANA_NEDEN_4: [dördüncü ana neden, maksimum 5 kelime]
+    ALT_NEDEN_4_1: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_4_2: [maksimum 5 kelime, öz ve net]
     
-    ANA_NEDEN_5: [beşinci ana neden]
-    ALT_NEDEN_5_1: [somut ve açıklayıcı bir cümle]
-    ALT_NEDEN_5_2: [somut ve açıklayıcı bir cümle]
+    ANA_NEDEN_5: [beşinci ana neden, maksimum 5 kelime]
+    ALT_NEDEN_5_1: [maksimum 5 kelime, öz ve net]
+    ALT_NEDEN_5_2: [maksimum 5 kelime, öz ve net]
     
     ÖNEMLİ KURALLAR:
     - PROBLEM_TIPI dışında hiçbir yere Growth, Cost, Operational, Technology, Regulation, Organizational, Hybrid yazma
-    - Her ALT_NEDEN mutlaka somut bir cümle olmalı, tek kelime olamaz
+    - Her alan maksimum 5 kelime olmalı
+    - Kısa, öz ve net yaz
+    - Örnek doğru: "Hedefleme yanlış", "Reklam optimizasyonu zayıf"
+    - Örnek yanlış: "Müşterinin dijital reklam stratejisinin hiệu quả olmaması nedeniyle..."
     - ALT_NEDEN alanları hiçbir zaman boş kalamaz
     - Eğer yeterli alt neden bulamazsan ana nedenin farklı boyutlarını düşünerek alt nedenler oluşturabilirsin
     """

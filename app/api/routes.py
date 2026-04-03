@@ -70,6 +70,7 @@ async def execute_agent(request: TaskRequest):
         if agent_type == "peer_agent":
 
             problem_tree = session_data.get("problem_tree", {})
+            logger.info(f"[ROUTES] Problem tree: {bool(problem_tree)}, keys: {list(problem_tree.keys()) if problem_tree else []}")
 
             if problem_tree:
                 # -----------------------------------------------

@@ -50,11 +50,13 @@ async def run_peer_agent(task: str, has_problem_tree: bool = False) -> dict:
         Kullanıcının daha önce oluşturulmuş bir problem ağacı var.
         Aşağıdaki talebi analiz et ve sadece kategori adını yaz:
         
-        - ANALYSIS: Problem ağacındaki herhangi bir konu hakkında soru
-        - REDIRECT: Tamamen yeni ve farklı bir business problemi
+        - ANALYSIS: Problem ağacındaki herhangi bir konu, ana neden, alt neden hakkında soru veya açıklama isteği. Bu kategoriyi seç eğer soru problem ağacıyla ilgiliyse.
+        - REDIRECT: Tamamen yeni ve farklı bir business problemi (öncekiyle alakasız yeni bir sorun)
         - GREETING: Selamlama, teşekkür, vedalaşma
-        - DIRECT_ANSWER: Genel business bilgi sorusu (pazar, rekabet, sektör)
-        - OUT_OF_SCOPE: Sadece yemek, film, müzik gibi tamamen iş dışı konular
+        - DIRECT_ANSWER: Problem ağacıyla alakasız genel business bilgi sorusu
+        - OUT_OF_SCOPE: Yemek, film, müzik gibi tamamen iş dışı konular
+        
+        ÖNEMLİ: Eğer soruda "ana neden", "açıklar mısın", "detay ver", "nedir" gibi ifadeler varsa ve problem ağacıyla ilgiliyse mutlaka ANALYSIS seç!
         
         Talep: {task}
         Sadece kategori adını yaz.
