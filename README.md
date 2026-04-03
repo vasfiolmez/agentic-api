@@ -9,7 +9,7 @@
 API is live at: **http://16.16.67.157:8001**
 
 - Swagger UI: http://16.16.67.157:8001/docs
-- Health Check: http://16.16.67.157:8001/health
+
 
 ## ✨ Features
 
