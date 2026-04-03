@@ -1,211 +1,427 @@
-# Peer Agent Controlled Task Distribution API
+# 🤖 Peer Agent Controlled Task Distribution API
 
-Multi-agent sistem: Peer Agent, Business Sense Discovery ve Problem Structuring agent'larından oluşur.
+> A sophisticated multi-agent system that intelligently routes business tasks, conducts conversational problem discovery, and generates structured problem trees using LangGraph and LLM technology.
 
-## Mimari Diyagram
+---
+
+## ✨ Features
+
+- **Intelligent Task Routing** — Peer Agent automatically categorizes and routes requests to the right agent
+- **Conversational Problem Discovery** — Dynamic follow-up questioning to uncover root causes
+- **Automated Problem Tree Generation** — Structured diagnosis with root causes and sub-causes
+- **Problem Analysis Agent** — Deep-dive Q&A on generated problem trees
+- **Code Generation Agent** — Professional, documented code on demand
+- **Persistent Session Management** — MongoDB-backed sessions survive server restarts
+- **LangGraph State Machine** — Clean, modular agent orchestration
+- **Web Search Integration** — Real-time business intelligence via Tavily
+
+---
+
+## 🏗️ Architecture
+
+### Agent Flow Diagram
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   KULLANICI                         │
-│         POST /api/v1/agent/execute                  │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│                 PEER AGENT                          │
-│         (Kapı Görevlisi / Router)                   │
-│                                                     │
-│  DIRECT_ANSWER → Web'den ara, cevapla               │
-│  REDIRECT      → Discovery Agent'a yönlendir        │
-│  OUT_OF_SCOPE  → Business dışı, yönlendir           │
-│  GREETING      → Selamlama/teşekkür, nazikçe karşıla│
-└──────┬──────────────────────────┬───────────────────┘
-       │                          │
-       ▼                          ▼
-┌──────────────┐        ┌─────────────────────────────┐
-│ Direkt Cevap │        │   BUSINESS SENSE DISCOVERY  │
-│ + Referanslar│        │         AGENT               │
-└──────────────┘        │                             │
-                        │  Soru-cevap akışı yürütür   │
-                        │  Problem netleştirir        │
-                        │  4 çıktı üretir             │
-                        └─────────────┬───────────────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────────┐
-                        │  PROBLEM STRUCTURING &      │
-                        │  DIAGNOSIS AGENT            │
-                        │                             │
-                        │  Problem tipini belirler    │
-                        │  Problem ağacı oluşturur    │
-                        └─────────────┬───────────────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────────┐
-                        │         MONGODB             │
-                        │   (Tüm loglar kaydedilir)   │
-                        └─────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                        USER REQUEST                         │
+│              POST /api/v1/agent/execute                      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      PEER AGENT                             │
+│                  (Router / Gatekeeper)                      │
+│                                                             │
+│  DIRECT_ANSWER  →  Web search + structured response         │
+│  REDIRECT       →  Business Sense Discovery Agent           │
+│  CODE           →  Code Agent                               │
+│  ANALYSIS       →  Problem Analysis Agent                   │
+│  OUT_OF_SCOPE   →  Business perspective guidance            │
+│  GREETING       →  Friendly acknowledgment                  │
+└───┬─────────┬──────────────┬───────────────┬───────────────┘
+    │         │              │               │
+    ▼         ▼              ▼               ▼
+┌───────┐ ┌───────┐  ┌─────────────┐ ┌──────────────┐
+│Direct │ │ Code  │  │  Business   │ │   Problem    │
+│Answer │ │ Agent │  │   Sense     │ │   Analysis   │
+│+ Refs │ │       │  │  Discovery  │ │    Agent     │
+└───────┘ └───────┘  │   Agent     │ └──────────────┘
+                     │             │
+                     │ Q&A Loop    │
+                     │ (3+ rounds) │
+                     └──────┬──────┘
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │ 4 Structured Outputs│
+                 │ • Customer Problem  │
+                 │ • Business Problem  │
+                 │ • Hidden Root Risk  │
+                 │ • Chat Summary      │
+                 └──────────┬──────────┘
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │  Problem Structuring│
+                 │  & Diagnosis Agent  │
+                 │                     │
+                 │  • Problem Type     │
+                 │  • Main Problem     │
+                 │  • Problem Tree     │
+                 │    (3-5 root causes)│
+                 └──────────┬──────────┘
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │       MONGODB       │
+                 │  • Task Logs        │
+                 │  • Session Store    │
+                 └─────────────────────┘
 ```
 
-## Kurulum ve Çalıştırma
+### LangGraph State Machine
 
-### 1. .env dosyasını düzenle
+```
+                    ┌─────────┐
+                    │  START  │
+                    └────┬────┘
+                         │
+                         ▼
+                   ┌───────────┐
+                   │ peer_node │
+                   └─────┬─────┘
+                         │
+              ┌──────────┼──────────┐
+              │          │          │
+              ▼          ▼          ▼
+       ┌──────────┐ ┌─────────┐ ┌─────┐
+       │discovery │ │  code   │ │ END │
+       │  _node   │ │  _node  │ │     │
+       └────┬─────┘ └────┬────┘ └─────┘
+            │             │
+            ▼             ▼
+     ┌─────────────┐   ┌─────┐
+     │structuring  │   │ END │
+     │   _node     │   └─────┘
+     └──────┬──────┘
+            │
+            ▼
+     ┌─────────────┐
+     │ analysis    │
+     │   _node     │
+     └──────┬──────┘
+            │
+            ▼
+          ┌─────┐
+          │ END │
+          └─────┘
+```
+
+### Queue Architecture (Planned)
+
+```
+API Request → Redis Queue → Celery Worker → Agent → MongoDB
+                                ↑
+                           Task polling
+```
+
+> Queue implementation is planned for production. Currently, requests are processed synchronously. See [Production Recommendations](#-production-recommendations) for details.
+
+---
+
+## 🛠️ Tech Stack
+
+| Technology | Purpose |
+|---|---|
+| **Python 3.12** | Core language |
+| **FastAPI** | REST API framework with async support |
+| **LangGraph** | Agent state machine orchestration |
+| **LangChain** | LLM integration framework |
+| **Groq (llama-3.3-70b-versatile)** | LLM — fast, free tier, high quality |
+| **Tavily Search** | Real-time web search for business intelligence |
+| **MongoDB + Motor** | Async database for logs and session storage |
+| **Docker + Compose** | Containerized deployment |
+| **GitHub Actions** | CI/CD pipeline |
+| **Pydantic** | Data validation and schema definition |
+
+---
+
+## 🤖 Agents
+
+### 1. Peer Agent
+The system's gatekeeper. Analyzes every incoming request and routes to the appropriate agent.
+
+**Categories:**
+- `DIRECT_ANSWER` — Business knowledge questions (market, competition, trends)
+- `REDIRECT` — Business problems → Discovery Agent
+- `CODE` — Code generation → Code Agent
+- `ANALYSIS` — Problem tree questions → Analysis Agent
+- `GREETING` — Greetings and farewells
+- `OUT_OF_SCOPE` — Non-business requests with redirection guidance
+
+### 2. Business Sense Discovery Agent
+Conducts structured Q&A to uncover the real root problem behind customer statements.
+
+**Outputs:**
+- `customer_stated_problem` — Problem in customer's own words
+- `identified_business_problem` — Clarified, structured business problem
+- `hidden_root_risk` — Unspoken risks identified through conversation
+- `customer_chat_summary` — Complete conversation summary
+- `questions_asked` — All questions asked during discovery
+
+### 3. Problem Structuring & Diagnosis Agent
+Transforms discovery outputs into a structured problem tree.
+
+**Output:**
+- Problem type (Growth / Cost / Operational / Technology / Regulation / Organizational / Hybrid)
+- Main problem statement
+- 3-5 root causes, each with 2-3 sub-causes
+
+### 4. Problem Analysis Agent
+Answers deep-dive questions about the generated problem tree using it as context.
+
+### 5. Code Agent
+Generates clean, documented, production-ready code with error handling.
+
+---
+
+## 🧠 LLM & Prompt Engineering
+
+### Model Selection
+**Groq llama-3.3-70b-versatile** was chosen over Gemini (rate limits) and OpenAI (cost) because:
+- Generous free tier
+- Sub-second response times
+- Strong reasoning for business analysis tasks
+
+### Prompt Engineering Best Practices Applied
+
+| Practice | Implementation |
+|---|---|
+| **Role Prompting** | Each agent begins with a clear role definition |
+| **Few-Shot Examples** | Discovery agent includes example customer responses |
+| **Negative Prompting** | Explicit "do NOT" rules prevent hallucinations |
+| **Output Formatting** | Structured output format enforced in every prompt |
+| **Temperature Control** | 0.3 for consistency; 0.1 for code generation |
+| **Chain of Thought** | Structuring agent reasons through problem types |
+| **Context Injection** | Session history and problem tree passed as context |
+
+### Temperature Strategy
+- **0.3** — Business agents (consistent, focused responses)
+- **0.1** — Code agent (deterministic, reliable code output)
+
+---
+
+## 📦 Installation
+
+### Prerequisites
+- Python 3.12+
+- Docker & Docker Compose
+- Groq API Key (free at [console.groq.com](https://console.groq.com))
+- Tavily API Key (free at [tavily.com](https://tavily.com))
+
+### 1. Clone the repository
 ```bash
+git clone https://github.com/vasfiolmez/agentic-api.git
+cd agentic-api
+```
+
+### 2. Configure environment variables
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+```env
 GROQ_API_KEY=your_groq_api_key
 TAVILY_API_KEY=your_tavily_api_key
 MONGODB_URL=mongodb://mongodb:27017
 DATABASE_NAME=agentic_db
 ```
 
-### 2. Docker ile çalıştır
+### 3. Run with Docker (Recommended)
 ```bash
 docker-compose up --build
 ```
 
-### 3. Local olarak çalıştır
+API will be available at: `http://localhost:8001`
+
+### 4. Run Locally
 ```bash
 python -m venv venv
-venv\Scripts\activate
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # macOS/Linux
+
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-### 4. API dokümantasyonu
+API will be available at: `http://localhost:8000`
+
+---
+
+## 🚀 Usage
+
+### API Documentation
+Visit `http://localhost:8000/docs` for interactive Swagger UI.
+
+### Basic Request
+```bash
+curl -X POST http://localhost:8000/api/v1/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Our sales have been declining for 3 months"}'
 ```
-http://localhost:8000/docs  (local)
-http://localhost:8001/docs  (docker)
-```
 
-## Agent Mimarisi
+### Example Scenarios
 
-### Peer Agent
-Sistemin kapı görevlisi. Her isteği karşılar ve 4 kategoriye ayırır:
-- **DIRECT_ANSWER**: Business bilgi sorusu → Web'den arar, cevaplar
-- **REDIRECT**: Business problemi → Discovery Agent'a yönlendirir
-- **OUT_OF_SCOPE**: Business dışı → Kullanıcıyı yönlendirir
-- **GREETING**: Selamlama/teşekkür → Nazikçe karşılık verir
-
-Discovery tamamlandıktan sonra aynı session'da yeni soru gelirse Peer Agent otomatik devreye girer.
-
-### Business Sense Discovery Agent
-Soru-cevap akışı ile problemi derinlemesine anlar. 4 çıktı üretir:
-- Customer Stated Problem
-- Identified Business Problem
-- Hidden Root Risk
-- Customer Chat Summary
-
-### Problem Structuring & Diagnosis Agent
-Discovery çıktılarını alır, problem ağacı oluşturur:
-- Problem tipi (Growth, Cost, Operational vb.)
-- Ana problem
-- 3-5 ana neden, her biri için 2-3 alt neden
-
-## API Kullanımı
-
-### Peer Agent — Business Bilgi Sorusu
+#### 1. Business Knowledge Query
 ```json
 POST /api/v1/agent/execute
 {
-  "task": "Elektrikli araç sektöründeki trendler nelerdir?",
-  "agent_type": "peer_agent"
+  "task": "What are the latest trends in the electric vehicle sector?"
 }
 ```
 
-### Peer Agent — Problem Yönlendirme
+#### 2. Problem Discovery Flow
 ```json
 POST /api/v1/agent/execute
 {
-  "task": "Satışlarım düşüyor, nedenini anlamak istiyorum",
-  "agent_type": "peer_agent"
+  "task": "Our sales are declining, I want to understand why"
+}
+
+// Continue with same session_id
+POST /api/v1/agent/execute
+{
+  "task": "Competitors dropped their prices 3 months ago",
+  "session_id": "returned-session-id"
 }
 ```
 
-### Discovery Agent — Soru Cevap Akışı
+#### 3. Code Generation
 ```json
 POST /api/v1/agent/execute
 {
-  "task": "3 aydır düşüyor, rakipler fiyat düşürdü",
-  "agent_type": "discovery_agent",
-  "session_id": "peer-agent-dan-gelen-session-id"
+  "task": "Write Python code to read and write a file"
 }
 ```
 
-### Discovery Tamamlandıktan Sonra Yeni Soru
+#### 4. Problem Tree Analysis
 ```json
 POST /api/v1/agent/execute
 {
-  "task": "Teşekkürler, başka sorum var",
-  "agent_type": "discovery_agent",
-  "session_id": "ayni-session-id"
+  "task": "Can you explain the marketing inefficiency root cause in detail?",
+  "session_id": "your-session-id"
 }
 ```
-Discovery tamamlandıktan sonra gelen her istek otomatik olarak Peer Agent'a yönlendirilir.
 
-## Teknoloji Seçimleri
+---
 
-| Teknoloji | Neden Seçildi |
-|---|---|
-| FastAPI | Async destek, otomatik dokümantasyon |
-| LangGraph | Agent state yönetimi, modüler yapı |
-| Groq (llama-3.3-70b-versatile) | Ücretsiz tier, çok hızlı yanıt süresi |
-| Tavily | LangChain native web search entegrasyonu |
-| MongoDB | Esnek JSON doküman yapısı, kolay loglama |
+## 📊 Logging
 
-## LLM ve Prompt Mühendisliği
+Two-layer logging strategy:
 
-- **Model**: Groq llama-3.3-70b-versatile
-  - Gemini 2.0 Flash ücretsiz tier limitleri nedeniyle Groq tercih edildi
-  - Groq çok daha cömert ücretsiz limit sunuyor ve yanıt hızı çok yüksek
-- **Temperature**: 0.3 — tutarlı ve odaklı cevaplar için düşük tutuldu
-- **Prompt yapısı**: Her agent için ayrı, görev odaklı sistem promptu
-- **Output parsing**: Structured format ile parse edilebilir çıktılar
-- **Follow-up sorular**: Discovery Agent müşteri cevaplarına göre dinamik soru üretiyor
+| Layer | Target | Purpose |
+|---|---|---|
+| **stdout** | Terminal / Docker logs | System events, errors, agent routing |
+| **MongoDB** | `task_logs` collection | Conversation history, agent outputs |
+| **MongoDB** | `sessions` collection | Persistent session state |
 
-## Loglama Tercihi
+MongoDB was chosen because:
+- Native JSON document storage matches Pydantic schemas
+- Persistent sessions survive server restarts
+- Easy querying of conversation history
 
-İki katmanlı loglama kullanıldı:
-- **Stdout**: Sistem logları (INFO, ERROR) — basit, yeterli, Docker loglarıyla uyumlu
-- **MongoDB**: Konuşma ve görev logları — kalıcı kayıt, Pydantic şema ile yapılandırılmış
+---
 
-## Genişletilebilirlik
-
-Yeni agent eklemek için:
-1. `app/agents/` altına yeni dosya ekle
-2. `app/models/schemas.py` içinde `AgentType` enum'una ekle
-3. `app/api/routes.py` içinde yeni agent'ı çağır
-
-## Queue Mimarisi (Planlanan)
-
-Bu versiyonda implement edilmedi. Planlanan yapı:
-```
-API → Redis Queue → Celery Worker → Agent → MongoDB
-```
-Yüksek trafikte LLM çağrıları yavaş olduğundan queue kritik önem taşır.
-Implement edilecek olsaydı:
-- `celery` ve `redis` kütüphaneleri eklenirdi
-- Her istek direkt işlenmek yerine kuyruğa yazılırdı
-- Worker ayrı bir container olarak çalışırdı
-- Kullanıcı `task_id` ile sonucu sorgulardı
-
-## CI/CD
-
-GitHub Actions ile otomatik test ve deploy:
-- Her `main` push'unda testler otomatik çalışır
-- Testler geçince AWS CodeDeploy ile deploy tetiklenir
-- `appspec.yml` ile sunucuda stop/install/start adımları yönetilir
-
-## Test
+## 🧪 Tests
 
 ```bash
 pip install pytest pytest-asyncio
 pytest tests/ -v
 ```
 
-## Production Önerileri
+### Current Test Coverage
+- `test_health_check` — API health endpoint
+- `test_empty_task` — Empty task validation
+- `test_peer_agent_out_of_scope` — Non-business request handling
+- `test_peer_agent_direct_answer` — Business knowledge query
 
-- **Rate limiting**: slowapi kütüphanesi ile
-- **API versiyonlama**: /api/v1, /api/v2
-- **Queue**: Celery + Redis
-- **Monitoring**: Prometheus + Grafana
-- **Auth**: JWT token
-- **Session storage**: Şu an in-memory, production'da Redis'e taşınmalı
+### Expanding Test Coverage
+To improve coverage, consider adding:
+- Discovery agent multi-turn conversation tests
+- Structuring agent output schema validation
+- Analysis agent context utilization tests
+- Session persistence tests (MongoDB mock)
+- Integration tests for full discovery → structuring flow
+- Load tests for concurrent session handling
+
+---
+
+## 🔄 CI/CD
+
+GitHub Actions pipeline runs on every push to `main`:
+
+1. **Test Job** — Runs pytest suite
+2. **Deploy Job** — Triggers AWS CodeDeploy (if tests pass)
+
+Required GitHub Secrets:
+- `GROQ_API_KEY`
+- `TAVILY_API_KEY`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `S3_BUCKET`
+
+---
+
+## 🏭 Production Recommendations
+
+| Area | Recommendation |
+|---|---|
+| **Queue** | Implement Celery + Redis for async task processing |
+| **Rate Limiting** | Add `slowapi` middleware (100 req/min per IP) |
+| **API Versioning** | Maintain `/api/v1`, `/api/v2` simultaneously |
+| **Authentication** | Add JWT token middleware |
+| **Monitoring** | Prometheus + Grafana for metrics |
+| **Session Storage** | Already on MongoDB |
+| **Scaling** | Horizontal scaling with multiple workers |
+| **Secrets** | Use AWS SSM Parameter Store for production secrets |
+
+### Queue Architecture (When Implemented)
+```
+POST /api/v1/agent/execute
+        ↓
+   Write to Redis Queue → Return task_id
+        ↓
+   Celery Worker picks up task
+        ↓
+   Agent processes request
+        ↓
+   Result stored in MongoDB
+        ↓
+GET /api/v1/task/{task_id}
+```
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 📬 Contact
+
+**GitHub:** [@vasfiolmez](https://github.com/vasfiolmez)
+
+---
+
+*Built with LangGraph, FastAPI, and Groq*
