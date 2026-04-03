@@ -320,6 +320,20 @@ POST /api/v1/agent/execute
   "session_id": "your-session-id"
 }
 ```
+#### 5. Greeting
+```json
+POST /api/v1/agent/execute
+{
+  "task": "Merhaba",
+  "session_id": "your-session-id"
+}
+```
+#### 5. Out of Scope
+```json
+POST /api/v1/agent/execute
+{
+  "task":  "Can you give me a pizza recipe?" 
+}
 
 ---
 
